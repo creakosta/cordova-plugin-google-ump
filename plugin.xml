@@ -2,7 +2,7 @@
 
 <plugin xmlns="http://apache.org/cordova/ns/plugins/1.0"
         id="cordova-plugin-google-ump"
-        version="2.1.0">
+        version="3.0.0">
   <name>Plugin for Google UMP SDK</name>
   <description>Cordova wrapper for Google UMP SDK.</description>
   <author>jellomaster</author>
@@ -11,6 +11,11 @@
   <repo>https://github.com/jellomaster/cordova-plugin-google-ump</repo>
   <issue>https://github.com/jellomaster/cordova-plugin-google-ump/issues</issue>
   
+  <engines>
+    <engine name="cordova-ios" version=">=6.0.0" />
+    <engine name="cordova-android" version=">=10.0.0" />
+  </engines>
+
   <js-module src="www/plugin.js" name="plugin">
     <runs />
     <clobbers target="Ump" />
@@ -31,7 +36,7 @@
             <source url="https://cdn.cocoapods.org/"/>
         </config>
         <pods use-frameworks="true">
-            <pod name="GoogleUserMessagingPlatform" spec="3.0.0" />
+            <pod name="GoogleUserMessagingPlatform" spec="~> 3.1.0" />
         </pods>
     </podspec>
   </platform>
@@ -52,7 +57,7 @@
     
     <source-file src="src/android/Ump.java" target-dir="src/com/jptrainor/plugins/ump" />
 
-    <framework src="com.google.android.ump:user-messaging-platform:3.2.0" />
+    <framework src="com.google.android.ump:user-messaging-platform:4.0.0" />
   </platform>
   
 </plugin>

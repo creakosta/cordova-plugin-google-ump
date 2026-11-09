@@ -1,3 +1,14 @@
+## 3.0.0 (update)
+
+- iOS: Google UMP SDK `~> 3.1.0` (Swift API from UMP 3.x, async/await). Fixes
+  `incorrect argument label in call (have 'completionHandler:', expected 'with:')`.
+- Android: Google UMP SDK `4.0.0` (requires minSdk 23). Removed unused Play Services imports.
+- JS API unchanged: `Ump.verifyConsent(isAgeConsent, isDebug, testDeviceHashId, cb, err)`,
+  `Ump.forceForm(cb, err)`, `Ump.reset(cb, err)`; result `{ consent, hasShownDialog, formAvailable }`.
+- iOS now honors `testDeviceHashId` (the hashed id UMP prints in the Xcode console) instead of IDFA.
+- Android now honors `isAgeConsent` (tag for under age of consent), same as iOS.
+- iOS: callback is always invoked (previously could hang when status was unknown / not required).
+
 # cordova-plugin-google-ump
 
 This plugin is an Ionic Cordova wrapper for the Google UMP SDK.
