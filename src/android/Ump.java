@@ -1,153 +1,93 @@
 package com.jptrainor.plugins.ump;
 
-import com.google.android.gms.common.GooglePlayServicesNotAvailableException;
-import com.google.android.gms.common.GooglePlayServicesRepairableException;
+import android.app.Activity;
+
 import com.google.android.ump.ConsentDebugSettings;
-import com.google.android.ump.ConsentForm;
 import com.google.android.ump.ConsentInformation;
 import com.google.android.ump.ConsentRequestParameters;
-import com.google.android.ump.FormError;
 import com.google.android.ump.UserMessagingPlatform;
 
-import org.apache.cordova.CordovaInterface;
-import org.apache.cordova.CordovaPlugin;
 import org.apache.cordova.CallbackContext;
-import org.apache.cordova.CordovaWebView;
-
+import org.apache.cordova.CordovaPlugin;
 import org.apache.cordova.PluginResult;
 import org.json.JSONArray;
-import org.json.JSONObject;
 import org.json.JSONException;
+import org.json.JSONObject;
 
-import java.io.IOException;
-
+/**
+ * Cordova wrapper for Google UMP SDK 4.x.
+ * JS API is unchanged: verifyConsent(isAgeConsent, isDebug, testDeviceHashId), forceForm(), reset().
+ * Success payload is always { consent, hasShownDialog, formAvailable }.
+ */
 public class Ump extends CordovaPlugin {
-
-    static enum Consent {
-        OBTAINED(true), NOT_OBTAINED(false);
-        private final boolean value;
-
-        private Consent(boolean value) {
-            this.value = value;
-        }
-
-        boolean getValue() {
-            return this.value;
-        }
-    }
-
-    static enum HasShownDialog {
-        SHOWN(true), NOT_SHOWN(false);
-        private final boolean value;
-
-        private HasShownDialog(boolean value) {
-            this.value = value;
-        }
-
-        boolean getValue() {
-            return this.value;
-        }
-    }
-
-    static enum FormAvailable {
-        AVAILABLE(true), NOT_AVAILABLE(false);
-        private final boolean value;
-
-        private FormAvailable(boolean value) {
-            this.value = value;
-        }
-
-        boolean getValue() {
-            return this.value;
-        }
-    }
-
-    @Override
-    public void initialize(CordovaInterface cordova, CordovaWebView webView) {
-        super.initialize(cordova, webView);
-    }
 
     @Override
     public boolean execute(String action, JSONArray args, CallbackContext callbackContext) throws JSONException {
         try {
-            return _execute(action, args, callbackContext);
-        } catch (IOException | GooglePlayServicesNotAvailableException | GooglePlayServicesRepairableException e) {
+            switch (action) {
+                case "verifyConsent": {
+                    boolean isAgeConsent = args.optBoolean(0, false);
+                    boolean isDebug = args.optBoolean(1, false);
+                    String testDeviceHashId = args.isNull(2) ? null : args.optString(2, null);
+                    if (testDeviceHashId != null && (testDeviceHashId.isEmpty() || testDeviceHashId.equals("null"))) {
+                        testDeviceHashId = null;
+                    }
+                    verifyConsent(isAgeConsent, isDebug, testDeviceHashId, callbackContext);
+                    return true;
+                }
+                case "forceForm":
+                    forceForm(callbackContext);
+                    return true;
+                case "reset":
+                    reset(callbackContext);
+                    return true;
+                default:
+                    return false;
+            }
+        } catch (Exception e) {
             callbackContext.error(e.getMessage());
             return true;
         }
     }
 
+    private void verifyConsent(boolean isAgeConsent, boolean isDebug, String testDeviceHashId, CallbackContext callbackContext) {
+        final Activity activity = cordova.getActivity();
 
-    private boolean _execute(String action, JSONArray args, CallbackContext callbackContext)
-            throws JSONException, GooglePlayServicesNotAvailableException, IOException, GooglePlayServicesRepairableException {
-        if (action.equals("verifyConsent")) {
-            boolean isAgeConsent = args.optBoolean(0);
-            boolean isDebug = args.optBoolean(1);
-            String testDeviceHashId = args.optString(2);
-            if (testDeviceHashId.equals("null")) {
-                testDeviceHashId = null;
-            }
-            verifyConsent(isAgeConsent, isDebug, testDeviceHashId, callbackContext);
-            return true;
-        } else if (action.equals("forceForm")) {
-            forceForm(callbackContext);
-            return true;
-        } else if (action.equals("reset")) {
-            reset(callbackContext);
-            return true;
-        }
-
-        return false;
-    }
-
-    private void verifyConsent(boolean isAgeConsent, boolean isDebug, String testDeviceHashId, CallbackContext callbackContext)
-            throws GooglePlayServicesNotAvailableException, IOException, GooglePlayServicesRepairableException {
-
-        ConsentRequestParameters requestParameters;
+        ConsentRequestParameters.Builder paramsBuilder = new ConsentRequestParameters.Builder()
+                .setTagForUnderAgeOfConsent(isAgeConsent);
 
         if (isDebug) {
-            ConsentDebugSettings.Builder debugSettingsBuilder = new ConsentDebugSettings.Builder(cordova.getActivity())
+            ConsentDebugSettings.Builder debugBuilder = new ConsentDebugSettings.Builder(activity)
                     .setDebugGeography(ConsentDebugSettings.DebugGeography.DEBUG_GEOGRAPHY_EEA);
-
             if (testDeviceHashId != null) {
-                debugSettingsBuilder = debugSettingsBuilder.addTestDeviceHashedId(testDeviceHashId);
+                debugBuilder.addTestDeviceHashedId(testDeviceHashId);
             }
-
-            requestParameters = new ConsentRequestParameters.Builder()
-                    .setConsentDebugSettings(debugSettingsBuilder.build())
-                    .build();
-        } else {
-            requestParameters = new ConsentRequestParameters.Builder()
-                    .build();
+            paramsBuilder.setConsentDebugSettings(debugBuilder.build());
         }
 
-        ConsentInformation consentInformation = UserMessagingPlatform.getConsentInformation(cordova.getContext());
-        consentInformation.requestConsentInfoUpdate(cordova.getActivity(), requestParameters,
-                new ConsentInformation.OnConsentInfoUpdateSuccessListener() {
-                    @Override
-                    public void onConsentInfoUpdateSuccess() {
-                        if (consentInformation.isConsentFormAvailable()) {
-                            loadForm(consentInformation, false, callbackContext);
-                        } else {
-                            success(Consent.OBTAINED, HasShownDialog.NOT_SHOWN, FormAvailable.NOT_AVAILABLE, callbackContext);
-                        }
+        final ConsentRequestParameters params = paramsBuilder.build();
+        final ConsentInformation consentInformation = UserMessagingPlatform.getConsentInformation(activity);
+
+        activity.runOnUiThread(() -> consentInformation.requestConsentInfoUpdate(
+                activity,
+                params,
+                () -> {
+                    if (consentInformation.isConsentFormAvailable()) {
+                        loadForm(consentInformation, false, callbackContext);
+                    } else {
+                        success(true, false, false, callbackContext);
                     }
                 },
-                new ConsentInformation.OnConsentInfoUpdateFailureListener() {
-                    @Override
-                    public void onConsentInfoUpdateFailure(FormError formError) {
-                        callbackContext.error(formError.getErrorCode());
-                    }
-                }
-        );
+                formError -> callbackContext.error(formError.getErrorCode())
+        ));
     }
 
     private void forceForm(CallbackContext callbackContext) {
-        loadForm(UserMessagingPlatform.getConsentInformation(cordova.getContext()), true, callbackContext);
+        loadForm(UserMessagingPlatform.getConsentInformation(cordova.getActivity()), true, callbackContext);
     }
 
     private void reset(CallbackContext callbackContext) {
-        UserMessagingPlatform.getConsentInformation(cordova.getContext()).reset();
+        UserMessagingPlatform.getConsentInformation(cordova.getActivity()).reset();
         callbackContext.success();
     }
 
@@ -155,52 +95,31 @@ public class Ump extends CordovaPlugin {
         if (forceForm || consentInformation.getConsentStatus() == ConsentInformation.ConsentStatus.REQUIRED) {
             presentForm(consentInformation, callbackContext);
         } else {
-            success(Consent.OBTAINED, HasShownDialog.NOT_SHOWN, FormAvailable.AVAILABLE, callbackContext);
+            success(true, false, true, callbackContext);
         }
     }
 
     private void presentForm(ConsentInformation consentInformation, CallbackContext callbackContext) {
-        cordova.getActivity().runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                UserMessagingPlatform.loadConsentForm(cordova.getContext(),
-                        new UserMessagingPlatform.OnConsentFormLoadSuccessListener() {
-                            @Override
-                            public void onConsentFormLoadSuccess(ConsentForm consentForm) {
-                                consentForm.show(cordova.getActivity(),
-                                        new ConsentForm.OnConsentFormDismissedListener() {
-                                            @Override
-                                            public void onConsentFormDismissed(FormError formError) {
-                                                if (consentInformation.getConsentStatus() == ConsentInformation.ConsentStatus.OBTAINED) {
-                                                    success(Consent.OBTAINED, HasShownDialog.SHOWN, FormAvailable.AVAILABLE, callbackContext);
-                                                } else {
-                                                    success(Consent.NOT_OBTAINED, HasShownDialog.SHOWN, FormAvailable.AVAILABLE, callbackContext);
-                                                }
-                                            }
-                                        });
-                            }
-                        },
-                        new UserMessagingPlatform.OnConsentFormLoadFailureListener() {
-                            @Override
-                            public void onConsentFormLoadFailure(FormError formError) {
-                                callbackContext.error(formError.getMessage());
-                            }
-                        }
-                );
-            }
-        });
+        final Activity activity = cordova.getActivity();
+        activity.runOnUiThread(() -> UserMessagingPlatform.loadConsentForm(
+                activity,
+                consentForm -> consentForm.show(activity, formError -> {
+                    boolean obtained = consentInformation.getConsentStatus() == ConsentInformation.ConsentStatus.OBTAINED;
+                    success(obtained, true, true, callbackContext);
+                }),
+                formError -> callbackContext.error(formError.getMessage())
+        ));
     }
 
-    private void success(Consent consent, HasShownDialog hasShownDialog, FormAvailable formAvailable, CallbackContext callbackContext) {
+    private void success(boolean consent, boolean hasShownDialog, boolean formAvailable, CallbackContext callbackContext) {
         JSONObject json = new JSONObject();
         try {
-            json.put("consent", consent.getValue());
-            json.put("hasShownDialog", hasShownDialog.getValue());
-            json.put("formAvailable", formAvailable.getValue());
+            json.put("consent", consent);
+            json.put("hasShownDialog", hasShownDialog);
+            json.put("formAvailable", formAvailable);
             callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.OK, json));
         } catch (JSONException e) {
             callbackContext.error(e.getMessage());
         }
     }
-
 }
